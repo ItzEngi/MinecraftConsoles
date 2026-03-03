@@ -89,3 +89,8 @@ For more information, see [COMPILE.md](COMPILE.md)
 ## Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=smartcmd/MinecraftConsoles&type=date&legend=top-left)](https://www.star-history.com/?spm=a2c6h.12873639.article-detail.7.7b9d7fabjNxTRk#smartcmd/MinecraftConsoles&type=date&legend=top-left)
+
+## Additional Notes
+- This fork is merely a backup for incase Microsoft strikes down the main project
+- Syncing will happen every day or when this fork is 10+ commits behind
+- First fork created at 08:40 UTC+2 3 March 2026
