@@ -33,9 +33,29 @@ Basic LAN multiplayer is available on the Windows build
 - Other players on the same LAN can discover the session from the in-game Join Game menu
 - Game connections use TCP port `25565` by default
 - LAN discovery uses UDP port `25566`
-- You can override your in-game username at launch with `username.txt`
 
 This feature is based on [LCEMP](https://github.com/LCEMP/LCEMP/)
+
+### Launch Arguments
+
+| Argument           | Description                                                                                                    |
+|--------------------|----------------------------------------------------------------------------------------------------------------|
+| `-name <username>` | Sets your in-game username                                                                                     |
+| `-server`          | Launches a headless server instead of the client                                                               |
+| `-ip <address>`    | Client mode: manually connect to an IP. Server mode: override the bind IP from `server.properties`            |
+| `-port <port>`     | Client mode: override the join port. Server mode: override the listen port from `server.properties`           |
+
+Example:
+```
+Minecraft.Client.exe -name Steve -ip 192.168.0.25 -port 25565
+```
+
+Headless server example:
+```
+Minecraft.Client.exe -server -ip 0.0.0.0 -port 25565
+```
+
+The headless server also reads and writes `server.properties` in the working directory. If `-ip` / `-port` are omitted in `-server` mode, it falls back to `server-ip` / `server-port` from that file. Dedicated-server host options such as `trust-players`, `pvp`, `fire-spreads`, `tnt`, `difficulty`, `gamemode`, `spawn-animals`, and `spawn-npcs` are persisted there as well.
 
 ## Controls (Keyboard & Mouse)
 
