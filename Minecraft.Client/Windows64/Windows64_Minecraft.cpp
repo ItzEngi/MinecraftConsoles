@@ -88,8 +88,7 @@ BOOL g_bWidescreen = TRUE;
 int g_iScreenWidth = 1920;
 int g_iScreenHeight = 1080;
 
-UINT g_ScreenWidth = 1920;
-UINT g_ScreenHeight = 1080;
+float g_iAspectRatio = static_cast<float>(g_iScreenWidth) / g_iScreenHeight;
 
 char g_Win64Username[17] = { 0 };
 wchar_t g_Win64UsernameW[17] = { 0 };
@@ -97,6 +96,14 @@ wchar_t g_Win64UsernameW[17] = { 0 };
 // Fullscreen toggle state
 static bool g_isFullscreen = false;
 static WINDOWPLACEMENT g_wpPrev = { sizeof(g_wpPrev) };
+
+//--------------------------------------------------------------------------------------
+// Update the Aspect Ratio to support Any Aspect Ratio
+//--------------------------------------------------------------------------------------
+void UpdateAspectRatio(int width, int height)
+{
+	g_iAspectRatio = static_cast<float>(width) / height;
+}
 
 struct Win64LaunchOptions
 {
@@ -468,6 +475,7 @@ ID3D11Texture2D*		g_pDepthStencilBuffer = NULL;
 //  WM_COMMAND	- process the application menu
 //  WM_PAINT	- Paint the main window
 //  WM_DESTROY	- post a quit message and return
+//  WM_SIZE		- handle resizing logic to support Any Aspect Ratio
 //
 //
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
@@ -501,82 +509,95 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		PostQuitMessage(0);
 		break;
 
-	// Keyboard/Mouse input handling
-	case WM_KEYDOWN:
-		if (!(lParam & 0x40000000)) // ignore auto-repeat
-			KMInput.OnKeyDown(wParam);
-		break;
-	case WM_KEYUP:
-		KMInput.OnKeyUp(wParam);
-		break;
-	case WM_SYSKEYDOWN:
-		if (wParam == VK_MENU) // Alt key
-		{
-			if (!(lParam & 0x40000000))
-				KMInput.OnKeyDown(wParam);
-			return 0; // prevent default Alt behavior
-		}
-		return DefWindowProc(hWnd, message, wParam, lParam);
-	case WM_SYSKEYUP:
-		if (wParam == VK_MENU)
-		{
-			KMInput.OnKeyUp(wParam);
-			return 0;
-		}
-		return DefWindowProc(hWnd, message, wParam, lParam);
-	case WM_INPUT:
-		KMInput.OnRawMouseInput(lParam);
-		break;
-	case WM_LBUTTONDOWN:
-		KMInput.OnMouseButton(0, true);
-		break;
-	case WM_LBUTTONUP:
-		KMInput.OnMouseButton(0, false);
-		break;
-	case WM_RBUTTONDOWN:
-		KMInput.OnMouseButton(1, true);
-		break;
-	case WM_RBUTTONUP:
-		KMInput.OnMouseButton(1, false);
-		break;
-	case WM_MBUTTONDOWN:
-		KMInput.OnMouseButton(2, true);
-		break;
-	case WM_MBUTTONUP:
-		KMInput.OnMouseButton(2, false);
-		break;
-	case WM_MOUSEWHEEL:
-		KMInput.OnMouseWheel(GET_WHEEL_DELTA_WPARAM(wParam));
-		break;
-	case WM_MOUSEMOVE:
-		KMInput.OnMouseMove(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
-		break;
-	case WM_ACTIVATE:
-		if (LOWORD(wParam) == WA_INACTIVE)
-			KMInput.SetCapture(false);
-		break;
-	case WM_SETFOCUS:
-		{
-			// Re-capture when window receives focus (e.g., after clicking on it)
-			Minecraft *pMinecraft = Minecraft::GetInstance();
-			bool shouldCapture = pMinecraft && app.GetGameStarted() && !ui.GetMenuDisplayed(0) && pMinecraft->screen == NULL;
-			if (shouldCapture)
-				KMInput.SetCapture(true);
-		}
-		break;
 	case WM_KILLFOCUS:
-		KMInput.SetCapture(false);
-		KMInput.ClearAllState();
+		g_KBMInput.ClearAllState();
+		g_KBMInput.SetWindowFocused(false);
+		if (g_KBMInput.IsMouseGrabbed())
+			g_KBMInput.SetMouseGrabbed(false);
 		break;
 
-	case WM_SETCURSOR:
-		// Hide the OS cursor when an Iggy/Flash menu is displayed (it has its own Flash cursor)
-		if (LOWORD(lParam) == HTCLIENT && !KMInput.IsCaptured() && ui.GetMenuDisplayed(0))
+	case WM_SETFOCUS:
+		g_KBMInput.SetWindowFocused(true);
+		break;
+
+	case WM_KEYDOWN:
+	case WM_SYSKEYDOWN:
+	{
+		int vk = (int)wParam;
+		if (lParam & 0x40000000) break; // ignore auto-repeat
+		if (vk == VK_SHIFT)
+			vk = (MapVirtualKey((lParam >> 16) & 0xFF, MAPVK_VSC_TO_VK_EX) == VK_RSHIFT) ? VK_RSHIFT : VK_LSHIFT;
+		else if (vk == VK_CONTROL)
+			vk = (lParam & (1 << 24)) ? VK_RCONTROL : VK_LCONTROL;
+		else if (vk == VK_MENU)
+			vk = (lParam & (1 << 24)) ? VK_RMENU : VK_LMENU;
+		g_KBMInput.OnKeyDown(vk);
+		break;
+	}
+	case WM_KEYUP:
+	case WM_SYSKEYUP:
+	{
+		int vk = (int)wParam;
+		if (vk == VK_SHIFT)
+			vk = (MapVirtualKey((lParam >> 16) & 0xFF, MAPVK_VSC_TO_VK_EX) == VK_RSHIFT) ? VK_RSHIFT : VK_LSHIFT;
+		else if (vk == VK_CONTROL)
+			vk = (lParam & (1 << 24)) ? VK_RCONTROL : VK_LCONTROL;
+		else if (vk == VK_MENU)
+			vk = (lParam & (1 << 24)) ? VK_RMENU : VK_LMENU;
+		g_KBMInput.OnKeyUp(vk);
+		break;
+	}
+
+	case WM_LBUTTONDOWN:
+		g_KBMInput.OnMouseButtonDown(KeyboardMouseInput::MOUSE_LEFT);
+		break;
+	case WM_LBUTTONUP:
+		g_KBMInput.OnMouseButtonUp(KeyboardMouseInput::MOUSE_LEFT);
+		break;
+	case WM_RBUTTONDOWN:
+		g_KBMInput.OnMouseButtonDown(KeyboardMouseInput::MOUSE_RIGHT);
+		break;
+	case WM_RBUTTONUP:
+		g_KBMInput.OnMouseButtonUp(KeyboardMouseInput::MOUSE_RIGHT);
+		break;
+	case WM_MBUTTONDOWN:
+		g_KBMInput.OnMouseButtonDown(KeyboardMouseInput::MOUSE_MIDDLE);
+		break;
+	case WM_MBUTTONUP:
+		g_KBMInput.OnMouseButtonUp(KeyboardMouseInput::MOUSE_MIDDLE);
+		break;
+
+	case WM_MOUSEMOVE:
+		g_KBMInput.OnMouseMove(LOWORD(lParam), HIWORD(lParam));
+		break;
+
+	case WM_MOUSEWHEEL:
+		g_KBMInput.OnMouseWheel(GET_WHEEL_DELTA_WPARAM(wParam));
+		break;
+
+	case WM_INPUT:
 		{
-			SetCursor(NULL);
-			return TRUE;
+			UINT dwSize = 0;
+			GetRawInputData((HRAWINPUT)lParam, RID_INPUT, NULL, &dwSize, sizeof(RAWINPUTHEADER));
+			if (dwSize > 0 && dwSize <= 256)
+			{
+				BYTE rawBuffer[256];
+				if (GetRawInputData((HRAWINPUT)lParam, RID_INPUT, rawBuffer, &dwSize, sizeof(RAWINPUTHEADER)) == dwSize)
+				{
+					RAWINPUT* raw = (RAWINPUT*)rawBuffer;
+					if (raw->header.dwType == RIM_TYPEMOUSE)
+					{
+						g_KBMInput.OnRawMouseDelta(raw->data.mouse.lLastX, raw->data.mouse.lLastY);
+					}
+				}
+			}
 		}
-		return DefWindowProc(hWnd, message, wParam, lParam);
+		break;
+	case WM_SIZE:
+		{
+			UpdateAspectRatio(LOWORD(lParam), HIWORD(lParam));
+		}
+		break;
 	default:
 		return DefWindowProc(hWnd, message, wParam, lParam);
 	}
@@ -711,7 +732,7 @@ HRESULT InitDevice()
 //app.DebugPrintf("width: %d, height: %d\n", width, height);
 	width = g_iScreenWidth;
 	height = g_iScreenHeight;
-app.DebugPrintf("width: %d, height: %d\n", width, height);
+//app.DebugPrintf("width: %d, height: %d\n", width, height);
 
 	UINT createDeviceFlags = 0;
 #ifdef _DEBUG
@@ -852,6 +873,9 @@ void ToggleFullscreen()
 			SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
 	}
 	g_isFullscreen = !g_isFullscreen;
+
+	if (g_KBMInput.IsWindowFocused())
+		g_KBMInput.SetWindowFocused(true);
 }
 
 //--------------------------------------------------------------------------------------
@@ -877,7 +901,7 @@ static Minecraft* InitialiseMinecraftRuntime()
 	ui.init(g_pd3dDevice, g_pImmediateContext, g_pRenderTargetView, g_pDepthStencilView, g_iScreenWidth, g_iScreenHeight);
 
 	InputManager.Initialise(1, 3, MINECRAFT_ACTION_MAX, ACTION_MAX_MENU);
-	KMInput.Init(g_hWnd);
+	g_KBMInput.Init();
 	DefineActions();
 	InputManager.SetJoypadMapVal(0, 0);
 	InputManager.SetKeyRepeatRate(0.3f, 0.2f);
@@ -1106,15 +1130,48 @@ int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
 	SetProcessDPIAware();
 	g_iScreenWidth = GetSystemMetrics(SM_CXSCREEN);
 	g_iScreenHeight = GetSystemMetrics(SM_CYSCREEN);
+
+	// Load username from username.txt
+    char exePath[MAX_PATH] = {};
+    GetModuleFileNameA(NULL, exePath, MAX_PATH);
+    char *lastSlash = strrchr(exePath, '\\');
+    if (lastSlash)
+    {
+        *(lastSlash + 1) = '\0';
+    }
+
+    char filePath[MAX_PATH] = {};
+    _snprintf_s(filePath, sizeof(filePath), _TRUNCATE, "%susername.txt", exePath);
+
+    FILE *f = nullptr;
+    if (fopen_s(&f, filePath, "r") == 0 && f)
+    {
+        char buf[128] = {};
+        if (fgets(buf, sizeof(buf), f))
+        {
+            int len = (int)strlen(buf);
+            while (len > 0 && (buf[len - 1] == '\n' || buf[len - 1] == '\r' || buf[len - 1] == ' '))
+            {
+                buf[--len] = '\0';
+            }
+
+            if (len > 0)
+            {
+                strncpy_s(g_Win64Username, sizeof(g_Win64Username), buf, _TRUNCATE);
+            }
+        }
+        fclose(f);
+    }
+
+	// Load stuff from launch options, including username
 	Win64LaunchOptions launchOptions = ParseLaunchOptions();
 	ApplyScreenMode(launchOptions.screenMode);
 
+	// If no username, let's fall back
 	if (g_Win64Username[0] == 0)
 	{
-		DWORD sz = 17;
-		if (!GetUserNameA(g_Win64Username, &sz))
-			strncpy_s(g_Win64Username, 17, "Player", _TRUNCATE);
-		g_Win64Username[16] = 0;
+        // Default username will be "Player"
+        strncpy_s(g_Win64Username, sizeof(g_Win64Username), "Player", _TRUNCATE);
 	}
 
 	MultiByteToWideChar(CP_ACP, 0, g_Win64Username, -1, g_Win64UsernameW, 17);
@@ -1230,12 +1287,16 @@ int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
 	MSG msg = {0};
 	while( WM_QUIT != msg.message && !app.m_bShutdown)
 	{
-		if( PeekMessage( &msg, NULL, 0, 0, PM_REMOVE ) )
+		g_KBMInput.Tick();
+
+		while( PeekMessage( &msg, NULL, 0, 0, PM_REMOVE ) )
 		{
 			TranslateMessage( &msg );
 			DispatchMessage( &msg );
-			continue;
+			if (msg.message == WM_QUIT) break;
 		}
+		if (msg.message == WM_QUIT) break;
+
 		RenderManager.StartFrame();
 #if 0
 		if(pMinecraft->soundEngine->isStreamingWavebankReady() &&
@@ -1257,7 +1318,34 @@ int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
 		app.UpdateTime();
 		PIXBeginNamedEvent(0,"Input manager tick");
 		InputManager.Tick();
-		KMInput.Tick();
+
+		// Detect KBM vs controller input mode
+		if (InputManager.IsPadConnected(0))
+		{
+			bool controllerUsed = InputManager.ButtonPressed(0) ||
+				InputManager.GetJoypadStick_LX(0, false) != 0.0f ||
+				InputManager.GetJoypadStick_LY(0, false) != 0.0f ||
+				InputManager.GetJoypadStick_RX(0, false) != 0.0f ||
+				InputManager.GetJoypadStick_RY(0, false) != 0.0f;
+
+			if (controllerUsed)
+				g_KBMInput.SetKBMActive(false);
+			else if (g_KBMInput.HasAnyInput())
+				g_KBMInput.SetKBMActive(true);
+		}
+		else
+		{
+			g_KBMInput.SetKBMActive(true);
+		}
+
+		if (!g_KBMInput.IsMouseGrabbed())
+		{
+			if (!g_KBMInput.IsKBMActive())
+				g_KBMInput.SetCursorHiddenForUI(true);
+			else if (!g_KBMInput.IsScreenCursorHidden())
+				g_KBMInput.SetCursorHiddenForUI(false);
+		}
+
 		PIXEndNamedEvent();
 		PIXBeginNamedEvent(0,"Profile manager tick");
 		//		ProfileManager.Tick();
@@ -1387,29 +1475,29 @@ int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
 
 		ui.CheckMenuDisplayed();
 
-		// Update mouse capture: capture when in-game and no menu is open
+		// Update mouse grab: grab when in-game and no menu is open
 		{
 			static bool altToggleSuppressCapture = false;
 			bool shouldCapture = app.GetGameStarted() && !ui.GetMenuDisplayed(0) && pMinecraft->screen == NULL;
 			// Left Alt key toggles capture on/off for debugging
-			if (KMInput.IsKeyPressed(VK_MENU))
+			if (g_KBMInput.IsKeyPressed(VK_LMENU) || g_KBMInput.IsKeyPressed(VK_RMENU))
 			{
-				if (KMInput.IsCaptured()) { KMInput.SetCapture(false); altToggleSuppressCapture = true; }
-				else if (shouldCapture)   { KMInput.SetCapture(true);  altToggleSuppressCapture = false; }
+				if (g_KBMInput.IsMouseGrabbed()) { g_KBMInput.SetMouseGrabbed(false); altToggleSuppressCapture = true; }
+				else if (shouldCapture)   { g_KBMInput.SetMouseGrabbed(true);  altToggleSuppressCapture = false; }
 			}
 			else if (!shouldCapture)
 			{
-				if (KMInput.IsCaptured()) KMInput.SetCapture(false);
+				if (g_KBMInput.IsMouseGrabbed()) g_KBMInput.SetMouseGrabbed(false);
 				altToggleSuppressCapture = false;
 			}
-			else if (shouldCapture && !KMInput.IsCaptured() && GetFocus() == g_hWnd && !altToggleSuppressCapture)
+			else if (shouldCapture && !g_KBMInput.IsMouseGrabbed() && GetFocus() == g_hWnd && !altToggleSuppressCapture)
 			{
-				KMInput.SetCapture(true);
+				g_KBMInput.SetMouseGrabbed(true);
 			}
 		}
 
 		// F1 toggles the HUD
-		if (KMInput.IsKeyPressed(VK_F1))
+		if (g_KBMInput.IsKeyPressed(VK_F1))
 		{
 			int primaryPad = ProfileManager.GetPrimaryPad();
 			unsigned char displayHud = app.GetGameSettings(primaryPad, eGameSetting_DisplayHUD);
@@ -1418,7 +1506,7 @@ int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
 		}
 
 		// F3 toggles onscreen debug info
-		if (KMInput.IsKeyPressed(VK_F3))
+		if (g_KBMInput.IsKeyPressed(VK_F3))
 		{
 			if (Minecraft* pMinecraft = Minecraft::GetInstance())
 			{
@@ -1431,7 +1519,7 @@ int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
 
 #ifdef _DEBUG_MENUS_ENABLED
 		// F4 Open debug overlay
-        if (KMInput.IsKeyPressed(VK_F4))
+        if (g_KBMInput.IsKeyPressed(VK_F4))
         {
             if (Minecraft *pMinecraft = Minecraft::GetInstance())
             {
@@ -1444,7 +1532,7 @@ int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
         }
 
         // F6 Open debug console
-        if (KMInput.IsKeyPressed(VK_F6))
+        if (g_KBMInput.IsKeyPressed(VK_F6))
         {
         	static bool s_debugConsole = false;
         	s_debugConsole = !s_debugConsole;
@@ -1453,13 +1541,13 @@ int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
 #endif
 
 		// F11 Toggle fullscreen
-		if (KMInput.IsKeyPressed(VK_F11))
+		if (g_KBMInput.IsKeyPressed(VK_F11))
 		{
 			ToggleFullscreen();
 		}
 
 		// TAB opens game info menu. - Vvis :3 - Updated by detectiveren
-		if (KMInput.IsKeyPressed(VK_TAB) && !ui.GetMenuDisplayed(0))
+		if (g_KBMInput.IsKeyPressed(VK_TAB) && !ui.GetMenuDisplayed(0))
 		{
 			if (Minecraft* pMinecraft = Minecraft::GetInstance())
 			{
@@ -1560,8 +1648,6 @@ int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
 		// Fix for #7318 - Title crashes after short soak in the leaderboards menu
 		// A memory leak was caused because the icon renderer kept creating new Vec3's because the pool wasn't reset
 		Vec3::resetPool();
-
-		KMInput.EndFrame();
 	}
 
 	// Free resources, unregister custom classes, and exit.

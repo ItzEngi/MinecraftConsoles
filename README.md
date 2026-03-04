@@ -20,10 +20,11 @@ This project contains the source code of Minecraft Legacy Console Edition v1.6.0
 - Fixed compilation and execution in both Debug and Release mode on Windows using Visual Studio 2022
 - Added support for keyboard and mouse input
 - Added fullscreen mode support (toggle using F11)
-- Disabled V-Sync for better performance
+- (WIP) Disabled V-Sync for better performance
 - Added a high-resolution timer path on Windows for smoother high-FPS gameplay timing
 - Device's screen resolution will be used as the game resolution instead of using a fixed resolution (1920x1080)
 - LAN Multiplayer & Discovery
+- Added persistent username system via "username.txt"
 
 ## Multiplayer
 
@@ -38,12 +39,12 @@ This feature is based on [LCEMP](https://github.com/LCEMP/LCEMP/)
 
 ### Launch Arguments
 
-| Argument           | Description                                                                                                    |
-|--------------------|----------------------------------------------------------------------------------------------------------------|
-| `-name <username>` | Sets your in-game username                                                                                     |
-| `-server`          | Launches a headless server instead of the client                                                               |
-| `-ip <address>`    | Client mode: manually connect to an IP. Server mode: override the bind IP from `server.properties`            |
-| `-port <port>`     | Client mode: override the join port. Server mode: override the listen port from `server.properties`           |
+| Argument           | Description                                                                                         |
+|--------------------|-----------------------------------------------------------------------------------------------------|
+| `-name <username>` | Sets your in-game username                                                                          |
+| `-server`          | Launches a headless server instead of the client                                                    |
+| `-ip <address>`    | Client mode: manually connect to an IP. Server mode: override the bind IP from `server.properties`  |
+| `-port <port>`     | Client mode: override the join port. Server mode: override the listen port from `server.properties` |
 
 Example:
 ```
@@ -69,7 +70,6 @@ The headless server also reads and writes `server.properties` in the working dir
 - **Toggle View (FPS/TPS)**: `F5`
 - **Fullscreen**: `F11`
 - **Pause Menu**: `Esc`
-- **Toggle Mouse Capture**: `Left Alt` (for debugging)
 - **Attack / Destroy**: `Left Click`
 - **Use / Place**: `Right Click`
 - **Select Item**: `Mouse Wheel` or keys `1` to `9`
