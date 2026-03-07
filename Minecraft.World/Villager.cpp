@@ -16,6 +16,7 @@
 #include "net.minecraft.world.level.h"
 #include "..\Minecraft.Client\Textures.h"
 #include "Villager.h"
+#include "AbstractContainerMenu.h"
 
 unordered_map<int, pair<int,int> > Villager::MIN_MAX_VALUES;
 unordered_map<int, pair<int,int> > Villager::MIN_MAX_PRICES;
@@ -307,6 +308,18 @@ void Villager::die(DamageSource *source)
 		}
 	}
 
+	// Make the gui close if the villager die while trading
+    if (auto currentTrader = tradingPlayer.lock())
+    {
+        if (currentTrader->containerMenu != nullptr)
+        {
+            auto menu = currentTrader->containerMenu;
+            menu->removed(currentTrader);
+        }
+
+        tradingPlayer.reset();
+    }
+
 	AgableMob::die(source);
 }
 
@@ -500,7 +513,7 @@ void Villager::addOffers(int addCount)
 	}
 
 	// shuffle the list to make it more interesting
-	std::random_shuffle(newOffers->begin(), newOffers->end());
+    std::shuffle(newOffers->begin(), newOffers->end(), std::mt19937{std::random_device{}()});
 
 	if (offers == NULL)
 	{
